@@ -479,4 +479,46 @@ func TestEastAsianLineBreaks(t *testing.T) {
 		t,
 	)
 
+	markdown = testutil.NewMarkdownToStringFunc(
+		parser.New(),
+		html.New(
+			html.WithXHTML(),
+			html.WithUnsafe(),
+			html.WithLineBreakStrategy(html.CSSText3LineBreakStrategy),
+		),
+	)
+
+	no = 27
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks at inline container boundaries walk up to enclosing inline siblings",
+			Markdown:    "[*a*\n](https://example.com)的\n\n的[\n*a*](https://example.com)\n\n[*a*\n](https://example.com)b",
+			Expected:    "<p><a href=\"https://example.com\"><em>a</em></a>的</p>\n<p>的<a href=\"https://example.com\"><em>a</em></a></p>\n<p><a href=\"https://example.com\"><em>a</em>\n</a>b</p>",
+		},
+		t,
+	)
+
+	markdown = testutil.NewMarkdownToStringFunc(
+		parser.New(),
+		html.New(
+			html.WithXHTML(),
+			html.WithUnsafe(),
+			html.WithLineBreakStrategy(html.SimpleEastAsianLineBreakStrategy),
+		),
+	)
+
+	no = 28
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks inside Image alt text do not climb outside the Image node",
+			Markdown:    "![中\n](a.png)文\n\n中![\n文](a.png)",
+			Expected:    "<p><img src=\"a.png\" alt=\"中\n\" />文</p>\n<p>中<img src=\"a.png\" alt=\"\n文\" /></p>",
+		},
+		t,
+	)
+
 }

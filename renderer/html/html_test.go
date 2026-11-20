@@ -12,6 +12,7 @@ import (
 	"github.com/yuin/goldmark/v2/parser"
 	"github.com/yuin/goldmark/v2/renderer"
 	"github.com/yuin/goldmark/v2/renderer/html"
+	"github.com/yuin/goldmark/v2/text"
 	"github.com/yuin/goldmark/v2/util"
 )
 
@@ -149,5 +150,62 @@ func TestContextWritersSatisfyIOWriterContract(t *testing.T) {
 	}
 	if copied != 6 {
 		t.Fatalf("io.Copy called %d times, want 6", copied)
+	}
+}
+
+func TestSoftLineBreakAdjacentRuneScanIsBounded(t *testing.T) {
+	r := html.New(html.WithLineBreakStrategy(html.SimpleEastAsianLineBreakStrategy))
+
+	// A few invisible inline nodes between East Asian runes: the soft line
+	// breaks look through them and are removed.
+	links := strings.Repeat(`[](u)`, 4)
+	want := "<p>中" + strings.Repeat(`<a href="u"></a>`, 4) + "文</p>\n"
+	if got := render(t, r, "中\n"+links+"\n文"); got != want {
+		t.Errorf("short run:\nwant %q\ngot  %q", want, got)
+	}
+
+	// A long run of invisible inline nodes exceeds the scan budget, so the
+	// adjacent runes are unknown and the soft line breaks are kept. Without the
+	// budget every soft line break rescans the run, which is quadratic.
+	links = strings.Repeat(`[](u)`, 64)
+	want = "<p>中\n" + strings.Repeat(`<a href="u"></a>`, 64) + "\n文</p>\n"
+	if got := render(t, r, "中\n"+links+"\n文"); got != want {
+		t.Errorf("long run:\nwant %q\ngot  %q", want, got)
+	}
+
+	renderNested := func(depth int) string {
+		doc := ast.NewDocument()
+		p := ast.NewParagraph()
+		doc.AppendChild(p)
+		p.AppendChild(ast.NewText(text.NewSingleLineValueFromString("中", nil)))
+		var cur ast.Node = p
+		for range depth {
+			em := ast.NewEmphasis()
+			cur.AppendChild(em)
+			cur = em
+		}
+		sb := ast.NewText(text.SingleLineValue{})
+		sb.SetSoftLineBreak(true)
+		cur.AppendChild(sb)
+		p.AppendChild(ast.NewText(text.NewSingleLineValueFromString("文", nil)))
+
+		var buf bytes.Buffer
+		if err := r.Render(&buf, nil, doc); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	// Shallow parent climbs look through enclosing inline containers.
+	want = "<p>中" + strings.Repeat("<em>", 4) + strings.Repeat("</em>", 4) + "文</p>\n"
+	if got := renderNested(4); got != want {
+		t.Errorf("shallow parent climb:\nwant %q\ngot  %q", want, got)
+	}
+
+	// Deep parent climbs also consume the scan budget and fall back to keeping
+	// the soft line break.
+	want = "<p>中" + strings.Repeat("<em>", 64) + "\n" + strings.Repeat("</em>", 64) + "文</p>\n"
+	if got := renderNested(64); got != want {
+		t.Errorf("deep parent climb:\nwant %q\ngot  %q", want, got)
 	}
 }

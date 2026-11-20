@@ -736,13 +736,12 @@ func (e *commonMark) renderText(
 			if i >= 0 {
 				last = util.ToRune(b, i)
 			}
-			// slow path
+			// slow path: n has no visible rune, look at the preceding nodes.
 			if last == 0 {
-				last, _ = lastRune(n, source)
+				last, _ = lastRuneBefore(n, source)
 			}
 
-			// firstRune is optimzed to avoid decoding the whole string of the next sibling node.
-			first, _ := firstRune(n.NextSibling(), source)
+			first, _ := firstRuneAfter(n, source)
 			if e.config.LineBreakStrategy.SoftLineBreak(last, first) {
 				_ = w.WriteByte('\n')
 			}
@@ -756,29 +755,89 @@ func (e *commonMark) renderText(
 	return ast.WalkContinue, nil
 }
 
-func lastRune(n ast.Node, source []byte) (rune, bool) {
-	for cur := n; cur != nil; cur = cur.PreviousSibling() {
-		inline, ok := cur.(ast.InlineNode)
-		if !ok {
+// maxAdjacentRuneScan bounds how many inline siblings and enclosing inline
+// parents lastRuneBefore and firstRuneAfter inspect for a single soft line
+// break. Without a bound, a long run or deep nesting of nodes without visible
+// runes (e.g. many lines of "[](u)") makes every soft line break rescan the
+// run, which is quadratic in the input size. When the bound is exhausted the
+// adjacent rune is treated as unknown, and line break strategies keep the soft
+// line break.
+const maxAdjacentRuneScan = 32
+
+// lastRuneBefore finds the closest non-empty rune preceding n within the
+// surrounding inline subtree, bounded by maxAdjacentRuneScan. When siblings at
+// the current level are exhausted, it climbs enclosing InlineNode parents (such
+// as Link or Emphasis) without crossing block or Image boundaries.
+func lastRuneBefore(n ast.Node, source []byte) (rune, bool) {
+	budget := maxAdjacentRuneScan
+	for node := n; node != nil; node = node.Parent() {
+		if _, ok := node.(ast.InlineNode); !ok {
 			break
 		}
-		r, ok := inline.LastRune(source)
-		if ok {
-			return r, true
+		if _, ok := node.(*ast.Image); ok {
+			// Image children render into the alt attribute rather than inline
+			// in the surrounding text, so do not inspect siblings outside it.
+			break
+		}
+		if node != n {
+			if budget == 0 {
+				return 0, false
+			}
+			budget--
+		}
+		for cur := node.PreviousSibling(); cur != nil; cur = cur.PreviousSibling() {
+			inline, ok := cur.(ast.InlineNode)
+			if !ok {
+				break
+			}
+			if budget == 0 {
+				return 0, false
+			}
+			budget--
+			r, ok := inline.LastRune(source)
+			if ok {
+				return r, true
+			}
 		}
 	}
 	return 0, false
 }
 
-func firstRune(n ast.Node, source []byte) (rune, bool) {
-	for cur := n; cur != nil; cur = cur.NextSibling() {
-		inline, ok := cur.(ast.InlineNode)
-		if !ok {
+// firstRuneAfter finds the closest non-empty rune following n within the
+// surrounding inline subtree, bounded by maxAdjacentRuneScan. If n sits at the
+// end of an inline container (e.g. a trailing soft break inside a Link), it
+// climbs enclosing InlineNode parents to inspect the container's following
+// inline siblings without crossing block or Image boundaries.
+func firstRuneAfter(n ast.Node, source []byte) (rune, bool) {
+	budget := maxAdjacentRuneScan
+	for node := n; node != nil; node = node.Parent() {
+		if _, ok := node.(ast.InlineNode); !ok {
 			break
 		}
-		r, ok := inline.FirstRune(source)
-		if ok {
-			return r, true
+		if _, ok := node.(*ast.Image); ok {
+			// Image children render into the alt attribute rather than inline
+			// in the surrounding text, so do not inspect siblings outside it.
+			break
+		}
+		if node != n {
+			if budget == 0 {
+				return 0, false
+			}
+			budget--
+		}
+		for cur := node.NextSibling(); cur != nil; cur = cur.NextSibling() {
+			inline, ok := cur.(ast.InlineNode)
+			if !ok {
+				break
+			}
+			if budget == 0 {
+				return 0, false
+			}
+			budget--
+			r, ok := inline.FirstRune(source)
+			if ok {
+				return r, true
+			}
 		}
 	}
 	return 0, false
