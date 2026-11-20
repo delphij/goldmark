@@ -386,4 +386,73 @@ func TestEastAsianLineBreaks(t *testing.T) {
 		t,
 	)
 
+	no = 21
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks around inline containers ending or starting with CodeSpan use the code span runes",
+			Markdown:    "commit\n[`e7d50326de51`](https://example.com)的\n\n的[`e7d50326de51`](https://example.com)\ncommit",
+			Expected:    "<p>commit\n<a href=\"https://example.com\"><code>e7d50326de51</code></a>的</p>\n<p>的<a href=\"https://example.com\"><code>e7d50326de51</code></a>\ncommit</p>",
+		},
+		t,
+	)
+
+	no = 22
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks around nested inline containers wrapping CodeSpan inspect innermost inline rune",
+			Markdown:    "foo\n[*`code`*](https://example.com)的\n\n的[*`code`*](https://example.com)\nbar",
+			Expected:    "<p>foo\n<a href=\"https://example.com\"><em><code>code</code></em></a>的</p>\n<p>的<a href=\"https://example.com\"><em><code>code</code></em></a>\nbar</p>",
+		},
+		t,
+	)
+
+	no = 23
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks around AutoLink inspect AutoLink label",
+			Markdown:    "See\n<https://example.com>的\n\n的<https://example.com>\nagain",
+			Expected:    "<p>See\n<a href=\"https://example.com\">https://example.com</a>的</p>\n<p>的<a href=\"https://example.com\">https://example.com</a>\nagain</p>",
+		},
+		t,
+	)
+
+	no = 24
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks around Image treat Image as replaced object rather than its alt text",
+			Markdown:    "See\n![图](a.png)\nagain\n\nSee\n![](a.png)的\n\n的![](a.png)\nagain",
+			Expected:    "<p>See\n<img src=\"a.png\" alt=\"图\" />\nagain</p>\n<p>See\n<img src=\"a.png\" alt=\"\" />的</p>\n<p>的<img src=\"a.png\" alt=\"\" />\nagain</p>",
+		},
+		t,
+	)
+
+	markdown = testutil.NewMarkdownToStringFunc(
+		parser.New(),
+		html.New(
+			html.WithXHTML(),
+			html.WithUnsafe(),
+			html.WithLineBreakStrategy(html.SimpleEastAsianLineBreakStrategy),
+		),
+	)
+
+	no = 25
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks around Image under SimpleEastAsianLineBreakStrategy treat Image as replaced object",
+			Markdown:    "中文\n![图](a.png)\n中文",
+			Expected:    "<p>中文\n<img src=\"a.png\" alt=\"图\" />\n中文</p>",
+		},
+		t,
+	)
+
 }

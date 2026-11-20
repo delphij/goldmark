@@ -34,15 +34,19 @@ func (w *fourByteWriter) Write(p []byte) (n int, err error) {
 }
 
 // FirstRune implements [InlineNode].FirstRune.
+//
+// It returns the first rune of the first InlineNode child that has one, so a
+// container such as Link or Emphasis also resolves its rune when it starts
+// with a non-Text node (e.g. CodeSpan) or a nested container.
 func (b *BaseInline) FirstRune(source []byte) (rune, bool) {
-	for cur := b.self; cur != nil; cur = cur.FirstChild() {
-		if t, ok := cur.(*Text); ok {
-			var fbw fourByteWriter
-			_, _ = t.Value.WriteTo(&fbw, source)
-			if fbw.written == 0 {
-				return 0, false
+	if b.self == nil {
+		return 0, false
+	}
+	for c := b.self.FirstChild(); c != nil; c = c.NextSibling() {
+		if inline, ok := c.(InlineNode); ok {
+			if r, ok := inline.FirstRune(source); ok {
+				return r, true
 			}
-			return util.ToRune(fbw.buf[:], 0), true
 		}
 	}
 
@@ -50,14 +54,18 @@ func (b *BaseInline) FirstRune(source []byte) (rune, bool) {
 }
 
 // LastRune implements [InlineNode].LastRune.
+//
+// It returns the last rune of the last InlineNode child that has one.
+// See FirstRune.
 func (b *BaseInline) LastRune(source []byte) (rune, bool) {
-	for cur := b.self; cur != nil; cur = cur.LastChild() {
-		if t, ok := cur.(*Text); ok {
-			v := t.Value.Value(source)
-			if len(v) == 0 {
-				return 0, false
+	if b.self == nil {
+		return 0, false
+	}
+	for c := b.self.LastChild(); c != nil; c = c.PreviousSibling() {
+		if inline, ok := c.(InlineNode); ok {
+			if r, ok := inline.LastRune(source); ok {
+				return r, true
 			}
-			return util.ToRune(util.StringToReadOnlyBytes(v), len(v)-1), true
 		}
 	}
 
@@ -514,6 +522,20 @@ func (n *Image) Dump(_ []byte) *NodeDump {
 	return NewNodeDump(n, m)
 }
 
+// FirstRune implements [InlineNode].FirstRune.
+//
+// An Image is rendered as an <img> element, not as its alt text, so it is
+// treated as an inline replaced element and reports U+FFFC (Object
+// Replacement Character) regardless of its alt text.
+func (n *Image) FirstRune(_ []byte) (rune, bool) {
+	return '\uFFFC', true
+}
+
+// LastRune implements [InlineNode].LastRune. See FirstRune.
+func (n *Image) LastRune(_ []byte) (rune, bool) {
+	return '\uFFFC', true
+}
+
 // KindImage is a NodeKind of the Image node.
 var KindImage = NewNodeKind("Image")
 
@@ -563,6 +585,27 @@ func (n *AutoLink) Dump(_ []byte) *NodeDump {
 		"Label":       n.Label,
 		"Text":        n.Text,
 	})
+}
+
+// FirstRune implements [InlineNode].FirstRune.
+//
+// An AutoLink has no child nodes; its rendered text is Label.
+func (n *AutoLink) FirstRune(source []byte) (rune, bool) {
+	var fbw fourByteWriter
+	_, _ = n.Label.WriteTo(&fbw, source)
+	if fbw.written == 0 {
+		return 0, false
+	}
+	return util.ToRune(fbw.buf[:], 0), true
+}
+
+// LastRune implements [InlineNode].LastRune.
+func (n *AutoLink) LastRune(source []byte) (rune, bool) {
+	v := n.Label.Value(source)
+	if len(v) == 0 {
+		return 0, false
+	}
+	return util.ToRune(util.StringToReadOnlyBytes(v), len(v)-1), true
 }
 
 // KindAutoLink is a NodeKind of the AutoLink node.
