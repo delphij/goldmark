@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	gast "github.com/yuin/goldmark/v2/ast"
+	extast "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
 	"github.com/yuin/goldmark/v2/renderer/html"
 	"github.com/yuin/goldmark/v2/testutil"
@@ -157,5 +158,28 @@ func TestFootnoteRenderSubtree(t *testing.T) {
 		`and B<sup id="fnref1:1"><a href="#fn:1" class="footnote-ref" title="link-title-2-1" role="doc-noteref">1</a></sup>.</p>` + "\n"
 	if buf.String() != expected {
 		t.Errorf("expected:\n%s\ngot:\n%s", expected, buf.String())
+	}
+}
+
+func TestFootnoteReferenceRunes(t *testing.T) {
+	cases := []struct {
+		index     int
+		wantFirst rune
+		wantLast  rune
+		wantOK    bool
+	}{
+		{index: -1, wantFirst: 0, wantLast: 0, wantOK: false},
+		{index: 1, wantFirst: '1', wantLast: '1', wantOK: true},
+		{index: 25, wantFirst: '2', wantLast: '5', wantOK: true},
+	}
+	for _, tc := range cases {
+		ref := extast.NewFootnoteReference(text.SingleLineValue{})
+		ref.Index = tc.index
+		if got, ok := ref.FirstRune(nil); got != tc.wantFirst || ok != tc.wantOK {
+			t.Errorf("index=%d FirstRune = (%q, %v), want (%q, %v)", tc.index, got, ok, tc.wantFirst, tc.wantOK)
+		}
+		if got, ok := ref.LastRune(nil); got != tc.wantLast || ok != tc.wantOK {
+			t.Errorf("index=%d LastRune = (%q, %v), want (%q, %v)", tc.index, got, ok, tc.wantLast, tc.wantOK)
+		}
 	}
 }

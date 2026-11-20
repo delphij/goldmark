@@ -32,6 +32,34 @@ func (n *FootnoteReference) Dump(_ []byte) *gast.NodeDump {
 	})
 }
 
+// FirstRune implements [gast.InlineNode].FirstRune.
+//
+// FootnoteReference has no child nodes and renders its 1-based Index digits
+// inside a <sup> link. Returning the leading ASCII digit prevents soft line
+// break strategies from skipping the footnote marker and falsely joining
+// adjacent punctuation/CJK text on one side with Latin text on the other.
+func (n *FootnoteReference) FirstRune(_ []byte) (rune, bool) {
+	if n.Index < 0 {
+		return 0, false
+	}
+	v := n.Index
+	for v >= 10 {
+		v /= 10
+	}
+	return rune('0' + v), true
+}
+
+// LastRune implements [gast.InlineNode].LastRune.
+//
+// See FirstRune for rationale; returns the trailing ASCII digit of Index
+// without allocating.
+func (n *FootnoteReference) LastRune(_ []byte) (rune, bool) {
+	if n.Index < 0 {
+		return 0, false
+	}
+	return rune('0' + n.Index%10), true
+}
+
 // KindFootnoteReference is a NodeKind of the FootnoteReference node.
 var KindFootnoteReference = gast.NewNodeKind("FootnoteReference")
 

@@ -455,4 +455,28 @@ func TestEastAsianLineBreaks(t *testing.T) {
 		t,
 	)
 
+	markdown = testutil.NewMarkdownToStringFunc(
+		parser.New(
+			parser.WithExtensions(extension.NewFootnoteParser()),
+		),
+		html.New(
+			html.WithXHTML(),
+			html.WithUnsafe(),
+			html.WithExtensions(extension.NewFootnoteHTMLRenderer()),
+			html.WithLineBreakStrategy(html.CSSText3LineBreakStrategy),
+		),
+	)
+
+	no = 26
+	testutil.DoTestCase(
+		markdown,
+		testutil.MarkdownTestCase{
+			No:          no,
+			Description: "Soft line breaks around FootnoteReference use footnote index digits instead of skipping node",
+			Markdown:    "中文。[^1]\nEnglish\n\nSee\n[^1]。\n\n[^1]: Note.",
+			Expected:    "<p>中文。<sup id=\"fnref:1\"><a href=\"#fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup>\nEnglish</p>\n<p>See\n<sup id=\"fnref1:1\"><a href=\"#fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup>。</p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr />\n<ol>\n<li id=\"fn:1\">\n<p>Note.&#160;<a href=\"#fnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a>&#160;<a href=\"#fnref1:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n</ol>\n</div>",
+		},
+		t,
+	)
+
 }
